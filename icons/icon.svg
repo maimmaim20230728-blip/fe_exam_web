@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="基本情報技術者 過去問トレーニング">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5c6bc0"/>
+      <stop offset="1" stop-color="#303f9f"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 下地 -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- ICのピン（上下左右に3本ずつ） -->
+  <g fill="#c5cae9">
+    <rect x="176" y="108" width="22" height="34" rx="8"/>
+    <rect x="245" y="108" width="22" height="34" rx="8"/>
+    <rect x="314" y="108" width="22" height="34" rx="8"/>
+    <rect x="176" y="370" width="22" height="34" rx="8"/>
+    <rect x="245" y="370" width="22" height="34" rx="8"/>
+    <rect x="314" y="370" width="22" height="34" rx="8"/>
+    <rect x="108" y="176" width="34" height="22" rx="8"/>
+    <rect x="108" y="245" width="34" height="22" rx="8"/>
+    <rect x="108" y="314" width="34" height="22" rx="8"/>
+    <rect x="370" y="176" width="34" height="22" rx="8"/>
+    <rect x="370" y="245" width="34" height="22" rx="8"/>
+    <rect x="370" y="314" width="34" height="22" rx="8"/>
+  </g>
+
+  <!-- ICのパッケージ -->
+  <rect x="136" y="136" width="240" height="240" rx="30" fill="#eef0fb"/>
+
+  <!-- コア -->
+  <rect x="192" y="192" width="128" height="128" rx="16" fill="#3f51b5"/>
+
+  <!-- コアの中の < > （プログラムの記号） -->
+  <g stroke="#ffffff" stroke-width="15" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <polyline points="238,224 210,256 238,288"/>
+    <polyline points="274,224 302,256 274,288"/>
+  </g>
+</svg>

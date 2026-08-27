@@ -1,0 +1,21 @@
+{
+  "name": "基本情報技術者 過去問トレーニング",
+  "short_name": "基本情報過去問",
+  "description": "基本情報技術者試験(科目A・科目B)の過去問を、回ごとの本試験モード・ランダム演習・間違い復習で解けるオフライン対応アプリ",
+  "lang": "ja",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f1f2fa",
+  "theme_color": "#3f51b5",
+  "categories": ["education"],
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
