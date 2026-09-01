@@ -3,23 +3,65 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#3f51b5">
+<meta name="theme-color" content="#3f51b5" id="theme-meta">
 <meta name="description" content="基本情報技術者試験(科目A・科目B)の過去問演習。回ごとの本試験モード・ランダム演習・間違い復習に対応したオフラインアプリ">
 <title>基本情報技術者 過去問トレーニング</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<script id="theme-boot">
+/* 配色は画面が出る前に決める。本体スクリプトは問題データ16本の後ろなので、
+   ここで立てておかないと夜間モードでも一瞬まぶしい白が出てしまう。 */
+(function(){
+  var t=null;
+  try{ t=localStorage.getItem("feexam.theme.v1"); }catch(e){}
+  if(t!=="dark"&&t!=="light"){
+    var m=null;
+    try{ m=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)"); }catch(e){}
+    t=(m&&m.matches)?"dark":"light";
+  }
+  document.documentElement.dataset.theme=t;
+  var meta=document.getElementById("theme-meta");
+  if(meta) meta.setAttribute("content", t==="dark"?"#131722":"#3f51b5");
+})();
+</script>
 <style>
+  /* 配色はすべてここに集約する。ダーク側で同じ変数を上書きするだけで夜間モードになる。 */
   :root{
+    color-scheme:light;
     --bg1:#f1f2fa; --bg2:#e9ebf6;
     --ink:#22262f; --ink-soft:#5c6270;
     --card:#ffffff; --line:#dfe1ec;
     --brand:#3f51b5; --brand-dark:#303f9f; --brand-soft:#e8eaf6;
     --accent:#f2a73b; --accent-soft:#fdf1de;
-    --correct:#15a35a; --correct-soft:#e4f6ec;
-    --wrong:#e0524d; --wrong-soft:#fbe7e6;
+    --correct:#15a35a; --correct-soft:#e4f6ec; --correct-ink:#0e6e3c;
+    --wrong:#e0524d; --wrong-soft:#fbe7e6; --wrong-ink:#a8302c;
+    --warn-line:#eccf9c; --warn-ink:#7a5310;      /* 注意書き・試験の注記 */
+    --dim:#dfe1e8; --dim-ink:#9aa0ac;             /* 押せないボタン・準備中の行 */
+    --recap:rgba(255,255,255,.70);                /* 問題文の再掲 */
+    --scrim:rgba(24,28,40,.72);                   /* オーバーレイの背景 */
+    --brand-glow:0 6px 16px rgba(63,81,181,.30);
     --shadow:0 8px 24px rgba(34,38,47,.10);
     --shadow-sm:0 3px 10px rgba(34,38,47,.08);
     --r:14px;
+  }
+  /* 夜間モード。深夜に開く人が多いので、白の面積を残さず暗い側へ寄せる。
+     図(白背景の作図画像)は反転させない＝色を反転する仕掛けは使わず、変数だけを差し替える。 */
+  :root[data-theme="dark"]{
+    color-scheme:dark;
+    --bg1:#131722; --bg2:#0f131c;
+    --ink:#e2e5ee; --ink-soft:#9aa1b4;
+    --card:#1c2130; --line:#2f3648;
+    --brand:#5c6bc0; --brand-dark:#9fa8da; --brand-soft:#26304a;
+    --accent:#f2a73b; --accent-soft:#3a2f1a;
+    --correct:#2fbf75; --correct-soft:#173327; --correct-ink:#8fe3b5;
+    --wrong:#e86b66; --wrong-soft:#3a1f1e; --wrong-ink:#f3a9a5;   /* 採点グリッドの小さい✕まで読めるよう昼より明るく */
+    --warn-line:#5d4a26; --warn-ink:#e6bd7a;
+    --dim:#252c3c; --dim-ink:#7d8598;
+    --recap:rgba(255,255,255,.045);
+    --scrim:rgba(4,7,14,.80);
+    --brand-glow:0 6px 16px rgba(0,0,0,.45);
+    --shadow:0 8px 24px rgba(0,0,0,.45);
+    --shadow-sm:0 3px 10px rgba(0,0,0,.35);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{height:100%;}
@@ -56,10 +98,10 @@
   .btn{border:none; border-radius:var(--r); cursor:pointer; font-family:inherit; font-weight:700;
     font-size:17px; padding:15px 18px; width:100%; transition:transform .08s, background .15s;}
   .btn:active{transform:scale(.985);}
-  .btn-primary{background:var(--brand); color:#fff; box-shadow:0 6px 16px rgba(63,81,181,.30);}
+  .btn-primary{background:var(--brand); color:#fff; box-shadow:var(--brand-glow);}
   .btn-primary:active{background:var(--brand-dark);}
   .btn-sub{background:var(--card); color:var(--brand-dark); border:2px solid var(--brand); box-shadow:var(--shadow-sm);}
-  .btn:disabled{background:#dfe1e8; color:#9aa0ac; box-shadow:none; cursor:default;}
+  .btn:disabled{background:var(--dim); color:var(--dim-ink); box-shadow:none; cursor:default;}
   .btn:disabled:active{transform:none;}
   .linkbtn{background:none; border:none; color:var(--ink-soft); font-size:13px; text-decoration:underline;
     cursor:pointer; font-family:inherit; padding:8px 6px;}
@@ -79,14 +121,17 @@
   .stat-row b{font-size:19px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums;}
   .stat-row.main b{color:var(--brand); font-size:23px;}
   .home-btns{display:flex; flex-direction:column; gap:11px;}
-  .warn{display:none; background:var(--accent-soft); border:1px solid #eccf9c; color:#7a5310;
+  .warn{display:none; background:var(--accent-soft); border:1px solid var(--warn-line); color:var(--warn-ink);
     border-radius:var(--r); padding:12px 14px; font-size:13px; line-height:1.6;}
   .home-foot{margin-top:auto; padding-top:18px; text-align:center;}
   .source{font-size:11.5px; color:var(--ink-soft); line-height:1.7; margin:0 0 8px; text-align:left;}
   .credit{display:inline-block; font-size:11.5px; color:var(--brand-dark); text-decoration:underline;}
   .credit:active{opacity:.6;}
   .foot-row{display:flex; align-items:center; justify-content:space-between; margin-top:6px;}
+  .foot-right{display:flex; align-items:center; gap:10px;}
   .ver{font-size:11px; color:var(--ink-soft); opacity:.8;}
+  /* 夜間モードの切替。主役ではないのでフッターに小さく置く */
+  .iconbtn.small{width:32px; height:32px; font-size:15px;}
 
   /* ============ 回選択 ============ */
   .list-head{font-size:14px; font-weight:800; color:var(--brand-dark); margin:16px 0 8px;
@@ -105,12 +150,13 @@
   .exam-row .esub{font-size:11.5px; color:var(--ink-soft); margin-top:2px;}
   .exam-row .ebest{flex:none; font-size:12px; font-weight:700; color:var(--brand-dark);
     background:var(--brand-soft); border-radius:999px; padding:4px 10px; white-space:nowrap;}
-  .exam-row.off .ebest{background:#eef0f4; color:var(--ink-soft);}
+  .exam-row.off .ebest{background:var(--dim); color:var(--ink-soft);}
 
   /* ============ 出題 ============ */
   .q-text{font-size:16px; line-height:1.8; white-space:pre-wrap; text-align:left;
     overflow-wrap:anywhere; margin:0 0 14px;}
   .figs{display:flex; flex-direction:column; gap:10px; margin:0 0 16px;}
+  /* 図は白背景の作図画像。夜間モードでも反転させず、白の下敷きのまま出す(反転すると読み取れない) */
   .figs img{max-width:100%; height:auto; display:block; margin:0 auto; background:#fff;
     border:1px solid var(--line); border-radius:8px; cursor:zoom-in;}
   .choices{display:flex; flex-direction:column; gap:10px; margin-bottom:8px;}
@@ -122,9 +168,9 @@
   /* マークはカタカナ(ア〜コ)なので幅をそろえる */
   .choice .mark{flex:none; min-width:1.35em; font-size:16px; line-height:1.65; font-weight:800; color:var(--brand-dark);}
   .choice .ctext{flex:1; min-width:0; white-space:pre-wrap; overflow-wrap:anywhere; font-weight:600;}
-  .choice.correct{background:var(--correct-soft); border-color:var(--correct); color:#0e6e3c;}
+  .choice.correct{background:var(--correct-soft); border-color:var(--correct); color:var(--correct-ink);}
   .choice.correct .mark{color:var(--correct);}
-  .choice.wrong{background:var(--wrong-soft); border-color:var(--wrong); color:#a8302c;}
+  .choice.wrong{background:var(--wrong-soft); border-color:var(--wrong); color:var(--wrong-ink);}
   .choice.wrong .mark{color:var(--wrong);}
   .choice.dim{opacity:.45;}
 
@@ -132,12 +178,12 @@
   .verdict{font-size:26px; font-weight:800; margin:0 0 4px; text-align:center;}
   .verdict.ok{color:var(--correct);} .verdict.ng{color:var(--wrong);}
   .ans-line{text-align:center; font-size:16px; font-weight:800; color:var(--brand-dark); margin:0 0 4px;}
-  .ans-note{display:none; text-align:center; font-size:12.5px; color:#7a5310; background:var(--accent-soft);
+  .ans-note{display:none; text-align:center; font-size:12.5px; color:var(--warn-ink); background:var(--accent-soft);
     border-radius:8px; padding:7px 10px; margin:0 0 6px;}
   .topic-line{text-align:center; margin:0 0 4px;}
   .topic-chip{display:none; font-size:11.5px; font-weight:700; color:var(--brand-dark);
     background:var(--brand-soft); border-radius:999px; padding:3px 11px;}
-  .recap{background:rgba(255,255,255,.7); border:1px solid var(--line); border-radius:12px;
+  .recap{background:var(--recap); border:1px solid var(--line); border-radius:12px;
     padding:12px 14px; margin:12px 0; font-size:13px; line-height:1.75; white-space:pre-wrap;
     overflow-wrap:anywhere; color:var(--ink-soft); max-height:34vh; overflow-y:auto;}
   .expl{background:var(--card); border-radius:var(--r); box-shadow:var(--shadow);
@@ -168,10 +214,11 @@
   .score-btns{display:flex; flex-direction:column; gap:11px; margin-top:auto;}
 
   /* ============ オーバーレイ ============ */
-  .overlay{position:fixed; inset:0; z-index:50; display:none; background:rgba(24,28,40,.72);
+  .overlay{position:fixed; inset:0; z-index:50; display:none; background:var(--scrim);
     animation:fade .2s ease; padding:16px;}
   .overlay.show{display:block;}
   #fig-overlay{overflow:auto; -webkit-overflow-scrolling:touch;}
+  /* 拡大表示も図はそのまま。夜間モードでも白の下敷きを外さない */
   #fig-overlay img{display:block; width:100%; max-width:none; height:auto; margin:0 auto;
     background:#fff; border-radius:6px;}
   .fig-close{position:fixed; top:calc(10px + env(safe-area-inset-top)); right:12px; z-index:51;}
@@ -182,11 +229,19 @@
   .pickbox h2{margin:0 0 4px; font-size:17px; color:var(--brand-dark);}
   .pickbox p{margin:0 0 14px; font-size:12.5px; color:var(--ink-soft);}
   .pick-item{display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;
-    font-family:inherit; font-weight:800; font-size:15px; color:var(--ink); background:#fff;
+    font-family:inherit; font-weight:800; font-size:15px; color:var(--ink); background:var(--card);
     border:2px solid var(--brand); border-radius:12px; padding:12px 14px; margin-bottom:9px; cursor:pointer;}
   .pick-item:active{transform:scale(.98);}
   .pick-item.sub{border-color:var(--brand-soft);}
   .pick-item .pn{font-size:12px; font-weight:700; color:var(--brand-dark); opacity:.85;}
+
+  /* ============ 解説閲覧 ============ */
+  .exam-row .qmark{flex:none; font-size:19px; font-weight:800; line-height:1.2;}
+  .qmark.ok{color:var(--correct);} .qmark.ng{color:var(--wrong);}
+  .browse-foot{margin-top:auto; padding-top:14px; text-align:center;}
+  .browse-nav{display:none; gap:10px; margin-bottom:10px;}
+  .browse-nav.show{display:flex;}
+  .verdict.browse{color:var(--ink); font-size:21px;}
 
   @media (prefers-reduced-motion: reduce){
     .screen{animation:none;}
@@ -218,14 +273,18 @@
       <button class="btn btn-primary" id="btn-exams">📝 回を選んで挑戦</button>
       <button class="btn btn-sub" id="btn-random">🎲 ランダム演習</button>
       <button class="btn btn-sub" id="btn-review">🔁 間違えた問題を復習</button>
+      <button class="btn btn-sub" id="btn-browse">📖 解説を読む</button>
     </div>
 
     <div class="home-foot">
       <p class="source">問題はIPA 情報処理技術者試験の過去問題を出典明記の上で使用しています(IPAの規定により許諾不要)。本アプリはIPAとは無関係の非公式学習ツールです。解説は本アプリ独自のもので、IPAの公式見解ではありません。</p>
-      <a class="credit" id="credit-link" href="https://soyogi.hp.peraichi.com/top" target="_blank" rel="noopener noreferrer">アプリ開発: 介護と支援の相談どころ そよぎ</a>
+      <a class="credit" id="credit-link" href="https://soudansoyogi.com/" target="_blank" rel="noopener noreferrer">アプリ開発: 介護と支援の相談どころ そよぎ</a>
       <div class="foot-row">
         <button class="linkbtn" id="reset-btn">学習記録をリセット</button>
-        <span class="ver" id="app-version">v0.1.0</span>
+        <div class="foot-right">
+          <span class="ver" id="app-version">v0.2.0</span>
+          <button class="iconbtn small" id="theme-btn" title="夜の色にする" aria-label="配色を切り替える" aria-pressed="false">🌙</button>
+        </div>
       </div>
     </div>
   </section>
@@ -235,14 +294,28 @@
     <div class="topbar">
       <button class="iconbtn" id="exams-home" title="ホームへ">✕</button>
       <div class="spacer"></div>
-      <span class="pill">本試験モード</span>
+      <span class="pill" id="exams-pill">本試験モード</span>
     </div>
-    <h2 class="sec-title">回を選んで挑戦</h2>
+    <h2 class="sec-title" id="exams-title">回を選んで挑戦</h2>
     <div id="exam-list">
       <h3 class="list-head" id="head-a">科目A(旧午前)</h3>
       <div class="exam-list" id="exam-list-a"></div>
       <h3 class="list-head" id="head-b">科目B</h3>
       <div class="exam-list" id="exam-list-b"></div>
+    </div>
+  </section>
+
+  <!-- ============ 解説閲覧（問題をえらぶ） ============ -->
+  <section id="browse" class="screen">
+    <div class="topbar">
+      <button class="iconbtn" id="browse-home" title="ホームへ">✕</button>
+      <div class="spacer"></div>
+      <span class="pill" id="browse-title"></span>
+    </div>
+    <h2 class="sec-title">問題をえらぶ</h2>
+    <div class="exam-list" id="browse-list"></div>
+    <div class="browse-foot">
+      <button class="linkbtn" id="browse-exams">回の一覧にもどる</button>
     </div>
   </section>
 
@@ -273,8 +346,14 @@
     </div>
     <p class="src-line" id="r-source"></p>
     <div class="result-foot">
+      <!-- 解説閲覧モードのときだけ出す前後移動 -->
+      <div class="browse-nav" id="browse-nav">
+        <button class="btn btn-sub" id="browse-prev">前の問題</button>
+        <button class="btn btn-primary" id="browse-next">次の問題</button>
+      </div>
       <button class="btn btn-primary" id="next-btn">次へ</button>
       <button class="linkbtn" id="result-home">ホームへ</button>
+      <button class="linkbtn" id="browse-back">一覧にもどる</button>
     </div>
   </section>
 
@@ -338,8 +417,10 @@
 (function(){
   "use strict";
 
-  var VERSION="0.1.0";
+  var VERSION="0.2.0";
   var STORAGE_KEY="feexam.save.v1";
+  var THEME_KEY="feexam.theme.v1";                      // 学習記録とは別キー＝リセットでは消えない
+  var THEME_META={ light:"#3f51b5", dark:"#131722" };   // ブラウザのバーの色
   // 選択肢マークはア〜コ(個数は choices.length に追従)
   var MARKS="アイウエオカキクケコ";
   // 表示順は新しい順。科目A=10回・科目B=6セット
@@ -372,7 +453,7 @@
   var DATA=window.FE_DATA||{};
 
   var save={ answers:{}, best:{}, decks:{} };
-  var mode=null;        // "exam" | "random" | "review"
+  var mode=null;        // "exam" | "random" | "review" | "browse"
   var deckKey=null;     // ランダム演習のプール識別 "a"/"T"/"M"/"S"/"b"
   var seq=[], seqIdx=0; // 本試験/復習の出題キュー(qidの配列)
   var current=null;     // {tag,pack,q,qid}
@@ -381,9 +462,12 @@
   var lastScore=null;   // {tag,correct,total}
   var fromScore=false;  // 解説画面へ採点結果のグリッドから来たか
   var timerId=null, timerStart=0;
+  var browseTag=null, browseSeq=[], browseIdx=0;   // 解説閲覧モード(学習記録には一切さわらない)
+  var theme="light";    // "light" | "dark"
 
   var el=function(id){ return document.getElementById(id); };
-  var screens={ home:el("home"), exams:el("exams"), quiz:el("quiz"), result:el("result"), score:el("score") };
+  var screens={ home:el("home"), exams:el("exams"), browse:el("browse"),
+                quiz:el("quiz"), result:el("result"), score:el("score") };
 
   /* ---- 保存 ---- */
   function load(){
@@ -397,6 +481,36 @@
     }catch(e){}
   }
   function persist(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(save)); }catch(e){} }
+
+  /* ---- 配色(夜間モード) ---- */
+  // 端末の設定を初期値にする。head の theme-boot が同じ判定で先に立てているので、ここは追認になる。
+  function prefersDark(){
+    try{ return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches); }
+    catch(e){ return false; }
+  }
+  function savedTheme(){
+    var t=null;
+    try{ t=localStorage.getItem(THEME_KEY); }catch(e){}
+    return (t==="dark"||t==="light") ? t : null;    // 壊れた値は無かったことにする
+  }
+  function applyTheme(t){
+    theme=(t==="dark")?"dark":"light";
+    var root=document.documentElement;
+    if(root){
+      if(root.dataset) root.dataset.theme=theme;
+      else root.setAttribute("data-theme", theme);
+    }
+    var meta=el("theme-meta");
+    if(meta) meta.setAttribute("content", THEME_META[theme]);
+    var b=el("theme-btn");
+    if(b){
+      b.textContent=(theme==="dark")?"☀️":"🌙";
+      b.title=(theme==="dark")?"昼の色にする":"夜の色にする";
+      b.setAttribute("aria-pressed", (theme==="dark")?"true":"false");
+    }
+  }
+  function setTheme(t){ applyTheme(t); try{ localStorage.setItem(THEME_KEY, theme); }catch(e){} }
+  function toggleTheme(){ setTheme(theme==="dark"?"light":"dark"); }
 
   /* ---- データの参照 ---- */
   function metaOf(tag){ return META[tag]||{}; }
@@ -467,6 +581,13 @@
     var suffix=(kindOfTag(f.tag)==="A") ? " 基本情報技術者試験 午前" : " 基本情報技術者試験 科目B";
     return "出典："+labelOf(f.tag)+suffix+" 問"+(f.q?f.q.q:"");
   }
+  // 解説閲覧の一覧に出す冒頭抜粋。本文はタグ入りHTMLなので、タグを外して素の文字に戻してから切る
+  function plainHead(html, n){
+    var s=String(html||"").replace(/<[^>]*>/g,"");
+    s=s.replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,"&");
+    s=s.replace(/\s+/g," ").trim();
+    return s.length>n ? s.slice(0,n)+"…" : s;
+  }
 
   /* ---- 記録の集計 ---- */
   function tally(kind){
@@ -518,6 +639,7 @@
     var total=poolQids(null).length, warn=el("data-warn");
     el("btn-exams").disabled=(total===0);
     el("btn-random").disabled=(total===0);
+    el("btn-browse").disabled=(total===0);
     if(total===0){
       warn.textContent="問題データが読み込まれていません。www/data/ に q_a_h27s.js 〜 q_b_r08.js を配置してください。";
       warn.style.display="block";
@@ -526,7 +648,7 @@
     }
   }
 
-  /* ---- 回選択 ---- */
+  /* ---- 回選択(本試験モードと解説閲覧で共用) ---- */
   // 16回分の枠は常に出し、データが無い行は「準備中」で押せなくする
   function examRows(kind){
     var base=(kind==="B")?TAGS_B:TAGS_A, seen={};
@@ -534,7 +656,7 @@
     var extra=allTags().filter(function(t){ return !seen[t] && kindOfTag(t)===kind; });
     return extra.concat(base);
   }
-  function renderExamList(box, kind){
+  function renderExamList(box, kind, browsing){
     box.innerHTML="";
     examRows(kind).forEach(function(tag){
       var p=DATA[tag], ready=!!(p&&p.questions&&p.questions.length), n=countOf(tag);
@@ -554,13 +676,16 @@
       else if(save.best[tag]!=null) best.textContent="ベスト "+save.best[tag]+"/"+n;
       else best.textContent="未挑戦";
       b.appendChild(body); b.appendChild(best);
-      if(ready) b.addEventListener("click", function(){ startExam(tag); });
+      if(ready) b.addEventListener("click", function(){ browsing ? openBrowse(tag) : startExam(tag); });
       box.appendChild(b);
     });
   }
   function renderExams(){
-    renderExamList(el("exam-list-a"), "A");
-    renderExamList(el("exam-list-b"), "B");
+    var browsing=(mode==="browse");
+    el("exams-pill").textContent = browsing ? "解説閲覧" : "本試験モード";
+    el("exams-title").textContent = browsing ? "回を選んで解説を読む" : "回を選んで挑戦";
+    renderExamList(el("exam-list-a"), "A", browsing);
+    renderExamList(el("exam-list-b"), "B", browsing);
   }
 
   /* ---- デッキ(ランダム演習) ---- */
@@ -695,36 +820,57 @@
   }
 
   /* ---- 解説 ---- */
+  function ansText(q){
+    var marks=(q.answers||[]).map(function(n){ return markOf(n); });
+    return "正解: "+(marks.length?marks.join("または"):"—");
+  }
+  // 公式の注記。下線(<u>)を含み得るのでHTML描画(データはビルド時エスケープ済み)
+  function renderNote(q){
+    var note=el("ans-note");
+    if(q.answer_note){ note.innerHTML=q.answer_note; note.style.display="block"; }
+    else { note.innerHTML=""; note.style.display="none"; }
+  }
+  function renderTopic(q){
+    var chip=el("r-topic");
+    if(q.topic){ chip.textContent=q.topic; chip.style.display="inline-block"; }
+    else { chip.textContent=""; chip.style.display="none"; }
+  }
+  // 問題文の再掲・図・解説本文・出典(採点からの閲覧でも解説閲覧モードでも同じ)
+  function renderRecap(f){
+    el("r-question").innerHTML=f.q.question||"";
+    renderFigs(el("r-figs"), f.q.figures);
+    var body=el("expl-body");
+    if(f.q.explanation){ body.innerHTML=f.q.explanation; }
+    else { body.innerHTML=""; body.textContent="(この問題の解説は準備中です)"; }
+    // 出典は必ず1行出す(IPAの利用条件対応)
+    el("r-source").textContent=sourceOf(f);
+  }
+  // フッターのボタンを場面で出し分ける(解説閲覧のときだけ前後移動)
+  function setResultFoot(browsing){
+    el("browse-nav").classList.toggle("show", !!browsing);
+    el("next-btn").style.display = browsing?"none":"";
+    el("result-home").style.display = browsing?"none":"";
+    el("browse-back").style.display = browsing?"":"none";
+    if(browsing){
+      el("browse-prev").disabled=(browseIdx<=0);
+      el("browse-next").disabled=(browseIdx>=browseSeq.length-1);
+    }
+  }
   function toResult(f, pick, ok, backToScore){
     fromScore=!!backToScore;
     var v=el("verdict");
     v.textContent = ok ? "○ 正解" : "✕ 不正解";
     v.className="verdict "+(ok?"ok":"ng");
 
-    var marks=(f.q.answers||[]).map(function(n){ return markOf(n); });
-    var line="正解: "+(marks.length?marks.join("または"):"—");
+    var line=ansText(f.q);
     // 採点結果から見に来たときは、自分が何を選んだか思い出せるように添える
     if(backToScore) line+="  /  あなたの解答: "+(pick==null?"未解答":markOf(pick));
     el("ans-line").textContent=line;
 
-    var note=el("ans-note");
-    if(f.q.answer_note){ note.innerHTML=f.q.answer_note; note.style.display="block"; }
-    else { note.innerHTML=""; note.style.display="none"; }
-
-    var chip=el("r-topic");
-    if(f.q.topic){ chip.textContent=f.q.topic; chip.style.display="inline-block"; }
-    else { chip.textContent=""; chip.style.display="none"; }
-
-    el("r-question").innerHTML=f.q.question||"";
-    renderFigs(el("r-figs"), f.q.figures);
-
-    var body=el("expl-body");
-    if(f.q.explanation){ body.innerHTML=f.q.explanation; }
-    else { body.innerHTML=""; body.textContent="(この問題の解説は準備中です)"; }
-
-    // 出典は必ず1行出す(IPAの利用条件対応)
-    el("r-source").textContent=sourceOf(f);
-
+    renderNote(f.q);
+    renderTopic(f.q);
+    renderRecap(f);
+    setResultFoot(false);
     el("next-btn").textContent = backToScore ? "採点結果にもどる" : "次へ";
     show("result");
   }
@@ -739,6 +885,56 @@
     var qid=nextFromDeck(), f=qid&&findQ(qid);
     if(!f){ goHome(); return; }
     current=f; renderQuestion();
+  }
+
+  /* ---- 解説閲覧(学習記録には一切さわらない) ---- */
+  // 回選択 → その回の問題一覧 → 解説。科目A(80問)・科目Bのセットとも問番号の順に並べる
+  function openBrowse(tag){
+    var p=DATA[tag];
+    if(!p||!p.questions||!p.questions.length) return;
+    mode="browse"; browseTag=tag; browseIdx=0;
+    browseSeq=sortedQuestions(tag).map(function(q){ return qidOf(tag,q.q); });
+    renderBrowseList(); show("browse");
+  }
+  function renderBrowseList(){
+    el("browse-title").textContent=shortOf(browseTag)+(kindOfTag(browseTag)==="A"?" 科目A":"");
+    var box=el("browse-list"); box.innerHTML="";
+    browseSeq.forEach(function(qid,i){
+      var f=findQ(qid);
+      if(!f) return;
+      var b=document.createElement("button");
+      b.type="button";
+      b.className="exam-row"+(kindOfTag(browseTag)==="B"?" kb":"");
+      var body=document.createElement("div"); body.className="ebody";
+      var nm=document.createElement("div"); nm.className="ename"; nm.textContent="問"+f.q.q;
+      var sub=document.createElement("div"); sub.className="esub"; sub.textContent=plainHead(f.q.question,20);
+      body.appendChild(nm); body.appendChild(sub);
+      b.appendChild(body);
+      // 解答履歴があれば右端に○/✕(未解答は何も出さない)
+      var a=save.answers[qid];
+      if(a && ((a.c||0)+(a.w||0))>0){
+        var mk=document.createElement("span");
+        mk.className="qmark "+(a.last===1?"ok":"ng");
+        mk.textContent=(a.last===1?"○":"✕");
+        b.appendChild(mk);
+      }
+      b.addEventListener("click", function(){ showBrowse(i); });
+      box.appendChild(b);
+    });
+  }
+  function showBrowse(i){
+    var f=findQ(browseSeq[i]);
+    if(!f) return;
+    mode="browse"; browseIdx=i; fromScore=false;
+    var v=el("verdict");
+    v.textContent="📖 解説閲覧";
+    v.className="verdict browse";     // 正誤の色は付けない
+    el("ans-line").textContent=ansText(f.q);
+    renderNote(f.q);
+    renderTopic(f.q);
+    renderRecap(f);
+    setResultFoot(true);
+    show("result");
   }
 
   /* ---- 採点結果 ---- */
@@ -791,10 +987,15 @@
   }
 
   /* ---- 配線 ---- */
-  el("btn-exams").addEventListener("click", function(){ renderExams(); show("exams"); });
+  el("btn-exams").addEventListener("click", function(){ mode=null; renderExams(); show("exams"); });
   el("btn-random").addEventListener("click", openPick);
   el("btn-review").addEventListener("click", function(){ if(!el("btn-review").disabled) startReview(); });
+  el("btn-browse").addEventListener("click", function(){
+    if(el("btn-browse").disabled) return;
+    mode="browse"; renderExams(); show("exams");
+  });
   el("reset-btn").addEventListener("click", resetProgress);
+  el("theme-btn").addEventListener("click", toggleTheme);
   el("exams-home").addEventListener("click", goHome);
   // 本試験の途中離脱は取り消しになるので一度だけ確認する
   el("quiz-home").addEventListener("click", function(){
@@ -817,9 +1018,17 @@
   el("pick-cancel").addEventListener("click", closePick);
   el("fig-overlay").addEventListener("click", closeFig);   // 背景タップで閉じる
   el("fig-close").addEventListener("click", closeFig);
+  // 解説閲覧
+  el("browse-home").addEventListener("click", goHome);
+  el("browse-exams").addEventListener("click", function(){ mode="browse"; renderExams(); show("exams"); });
+  el("browse-prev").addEventListener("click", function(){ if(browseIdx>0) showBrowse(browseIdx-1); });
+  el("browse-next").addEventListener("click", function(){ if(browseIdx<browseSeq.length-1) showBrowse(browseIdx+1); });
+  el("browse-back").addEventListener("click", function(){ renderBrowseList(); show("browse"); });
 
   /* ---- 起動 ---- */
   el("app-version").textContent="v"+VERSION;
+  applyTheme(savedTheme() || (prefersDark()?"dark":"light"));
+  setResultFoot(false);          // 解説画面のフッターは通常表示から始める
   load(); renderHome(); show("home");
 
   if("serviceWorker" in navigator && location.protocol.indexOf("http")===0){
@@ -832,10 +1041,13 @@
     show:show, goHome:goHome, renderHome:renderHome, renderExams:renderExams,
     startExam:startExam, startRandom:startRandom, startReview:startReview,
     onAnswer:onAnswer, toResult:toResult, nextPractice:nextPractice, renderScore:renderScore,
+    openBrowse:openBrowse, renderBrowseList:renderBrowseList, showBrowse:showBrowse, plainHead:plainHead,
+    setTheme:setTheme, toggleTheme:toggleTheme,
     poolQids:poolQids, wrongQids:wrongQids, allTags:allTags, findQ:findQ, tally:tally,
     kindOfTag:kindOfTag, qTagLabel:qTagLabel, sourceOf:sourceOf, markOf:markOf,
     peek:function(){ return { mode:mode, seq:seq, seqIdx:seqIdx, current:current, picks:picks,
-      lastScore:lastScore, save:save, deckKey:deckKey, fromScore:fromScore, examTitle:examTitle }; }
+      lastScore:lastScore, save:save, deckKey:deckKey, fromScore:fromScore, examTitle:examTitle,
+      browseTag:browseTag, browseSeq:browseSeq, browseIdx:browseIdx, theme:theme }; }
   };
 })();
 </script>
