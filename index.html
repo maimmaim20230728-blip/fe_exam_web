@@ -253,8 +253,33 @@
   .ask-row{display:flex; gap:10px;}
   .ask-row .btn{flex:1; padding:13px 10px;}
 
+  /* ============ はじめての つかいかた(初回の案内・2026-09-30) ============ */
+  /* 画面いっぱいに重ねる。ほかの窓(50)より上・確かめの窓(60)より下。
+     「まえへ/つぎへ」は下に固定した地の色の帯(長いページでも本文が透けない)。本文の下の余白は帯より高くする。
+     出るときは うすさだけ変える(transform を使うと、そのあいだ下の帯が案内といっしょに流れてしまう) */
+  .guide-ov{position:fixed; inset:0; z-index:55; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    background:var(--bg1); color:var(--ink); animation:guideIn .2s ease;
+    padding:calc(18px + env(safe-area-inset-top)) 18px calc(128px + env(safe-area-inset-bottom));}
+  @keyframes guideIn{from{opacity:0;} to{opacity:1;}}
+  .guide-box{max-width:540px; margin:0 auto;}
+  .guide-top{display:flex; justify-content:space-between; align-items:baseline; gap:12px;}
+  .guide-title{margin:0; font-size:14px; font-weight:800; color:var(--brand-dark);}
+  .guide-step{margin:0; font-size:14px; font-weight:700; color:var(--ink-soft); white-space:nowrap;
+    unicode-bidi:isolate; font-variant-numeric:tabular-nums;}
+  .guide-h{margin:14px 0 12px; font-size:21px; line-height:1.5; font-weight:800; color:var(--brand-dark);
+    overflow-wrap:anywhere;}
+  .guide-p{margin:0; background:var(--card); border-radius:var(--r); box-shadow:var(--shadow);
+    padding:16px 18px; font-size:16px; line-height:1.9; white-space:pre-line; overflow-wrap:anywhere;}
+  .guide-dots{display:flex; justify-content:center; flex-wrap:wrap; gap:8px; margin:20px 0 0;}
+  .guide-dot{width:10px; height:10px; border-radius:50%; background:var(--line);}
+  .guide-dot.on{background:var(--brand);}
+  .guide-row{position:fixed; z-index:56; left:0; right:0; bottom:0; display:flex; justify-content:center; gap:10px;
+    padding:10px 18px calc(14px + env(safe-area-inset-bottom)); background:var(--bg1); border-top:1px solid var(--line);}
+  .guide-row .btn{flex:1 1 0; min-width:0; max-width:260px; min-height:56px; padding:12px 10px;}
+
   @media (prefers-reduced-motion: reduce){
     .screen{animation:none;}
+    .guide-ov{animation:none;}
   }
 </style>
 </head>
@@ -287,12 +312,13 @@
     </div>
 
     <div class="home-foot">
+      <button class="linkbtn" id="guide-btn" type="button">つかいかたを もう一度 見る</button>
       <p class="source">問題はIPA 情報処理技術者試験の過去問題を出典明記の上で使用しています(IPAの規定により許諾不要)。本アプリはIPAとは無関係の非公式学習ツールです。解説は本アプリ独自のもので、IPAの公式見解ではありません。</p>
       <a class="credit" id="credit-link" href="https://soudansoyogi.com/" target="_blank" rel="noopener noreferrer">アプリ開発: 介護と支援の相談どころ そよぎ</a>
       <div class="foot-row">
         <button class="linkbtn" id="reset-btn">学習記録をリセット</button>
         <div class="foot-right">
-          <span class="ver" id="app-version">v0.2.1</span>
+          <span class="ver" id="app-version">v0.2.2</span>
           <button class="iconbtn small" id="theme-btn" title="夜の色にする" aria-label="配色を切り替える" aria-pressed="false">🌙</button>
         </div>
       </div>
@@ -427,7 +453,7 @@
 (function(){
   "use strict";
 
-  var VERSION="0.2.1";
+  var VERSION="0.2.2";
   var STORAGE_KEY="feexam.save.v1";
   var THEME_KEY="feexam.theme.v1";                      // 学習記録とは別キー＝リセットでは消えない
   var THEME_META={ light:"#3f51b5", dark:"#131722" };   // ブラウザのバーの色
@@ -1003,7 +1029,8 @@
   /* ---- Play版(Android)の戻るボタンと確かめの窓(2026-09-30) ----
      ・Capacitor の WebView は戻るボタンを受け取らない(@capacitor/app が無いと、戻る=アプリごと後ろに下がる)。
        Play版(isNativePlatform)だけ Capacitor.Plugins.App の backButton を受け取る(registerPlugin は WebView に無い)。
-       押したときの順: ①確かめの窓=いいえ ②図の拡大・ランダム演習の範囲えらび=閉じる
+       押したときの順: ①確かめの窓=いいえ ①'はじめての つかいかた=まえのページ(1ページ目は下の openGuide の決まり)
+                      ②図の拡大・ランダム演習の範囲えらび=閉じる
                       ③ホーム以外の画面=その画面の「もどる/✕/ホームへ」と同じ行き先(本試験モードの中断は今までどおり確かめる)
                       ④ホーム=アプリを後ろに下げる(minimizeApp。学習記録はそのまま)
      ・Play版の window.confirm は Capacitor がボタンを英語の OK / Cancel に決め打ちしている。
@@ -1066,6 +1093,7 @@
   var BACK_BTN={ exams:"exams-home", browse:"browse-exams", quiz:"quiz-home", score:"score-back" };
   function onBack(){
     if(askOpen){ askOpen.no(); return; }
+    if(guideOpen){ guideOpen.back(); return; }
     if(el("fig-overlay").classList.contains("show")){ closeFig(); return; }
     if(el("pick-overlay").classList.contains("show")){ closePick(); return; }
     var cur=activeScreen();
@@ -1084,6 +1112,84 @@
     try{ ap.addListener("backButton", function(){ onBack(); }); }catch(e){}
   }
 
+  /* ---- はじめての つかいかた(初回の案内・2026-09-30) ----
+     ヒロさん「ひとつずつ・そよぎ みたいなタイプのアプリは、必ず最初に使い方の丁寧な説明を出してほしい。10代の情報室のように」。
+     ・初回起動で必ず出す(最後まで読むまで、開くたびに出る)。画面いっぱいに重ねる(確かめの窓より下)
+     ・1ページずつ「つぎへ」「まえへ」で進む。閉じるのは最後のページの「はじめる」だけ(× は置かない)
+     ・戻るボタン(Play版): 2ページ目から=まえのページ / 1ページ目=初回なら後ろに下げる(閉じない・10代の情報室と同じ)、
+       ホームの「つかいかたを もう一度 見る」から開いたときは閉じる
+     ・読み終えたら GUIDE_KEY に "true"(学習記録とは別キー=「学習記録をリセット」では消えない)
+     ・本文の「」の中は画面の文字と同じにする(変えたら ここも。store/_back_check.js と _smoke.js が照らす) */
+  var GUIDE_KEY="feexam.guide.v1";
+  var GUIDE={
+    title:"つかいかた", step:"{n} / {m}", prev:"まえへ", next:"つぎへ", start:"はじめる",
+    heads:[
+      "基本情報技術者 過去問トレーニングへ ようこそ",
+      "本試験モード(回を選んで通しで解く)",
+      "ランダム演習",
+      "間違えた問題の復習",
+      "解説だけを読む",
+      "記録は この端末の中だけ",
+      "夜の色と、この案内"
+    ],
+    bodies:[
+      "IPAの基本情報技術者試験の過去問を解いて、解説を読んで学ぶアプリです。\n科目A(旧午前)は平成27年度 春期〜令和元年度 秋期の10回・800問、科目BはIPAが公開している50問を収めています。\n本アプリはIPAとは関係のない非公式の学習ツールで、解説も本アプリ独自のものです。",
+      "ホームの「📝 回を選んで挑戦」で、科目Aの回か、科目Bのセットをえらびます。\n1回分を問1から順に解き、答え合わせは最後にまとめて出ます。右上の時計は、かかった時間の目安です。\n採点結果には合格の目安(60%)が出て、マスを押すと その問題の解説を読めます。\n途中で左上の「✕」を押すと中断でき、その回の答えは記録されません。",
+      "「🎲 ランダム演習」では、出す範囲を「科目A 全部」「テクノロジ系」「マネジメント系」「ストラテジ系」「科目B 全部」からえらびます。\n1問答えるごとに、正解は緑、間違いは赤で出て、解説に進みます。「次へ」で次の問題、「ホームへ」でホームにもどります。\n同じ範囲では、ひととおり出るまで同じ問題はくり返しません。",
+      "間違えた問題は「🔁 間違えた問題を復習」で、もう一度解けます。\n出るのは、最後に解いたときに間違えた問題です。正解すると、復習から外れます。\n図は、押すと大きく見られます。",
+      "「📖 解説を読む」では、回をえらぶと問題の一覧が出て、問題を押すと その解説を読めます。\n「前の問題」「次の問題」で順に読めます。\nここで読んでも、学習記録は変わりません。解説の下には、いつも出典が出ます。",
+      "学習記録(正答率・ベスト・復習する問題など)は、この端末の中だけに保存され、どこにも送られません。登録もいりません。\nホームのいちばん下の「学習記録をリセット」で、記録をすべて消せます(消す前に確かめます)。\n機種を変えるときに、記録を移すしくみはありません。",
+      "ホームのいちばん下の 🌙 を押すと夜の色、☀️ を押すと昼の色になります。\nこの案内は、ホームの下のほうの「つかいかたを もう一度 見る」で、いつでも見られます。"
+    ]
+  };
+  var guideOpen=null;   // 出している案内({back:戻るボタン1回, page:いまのページ})
+  function guideDone(){ var v=null; try{ v=localStorage.getItem(GUIDE_KEY); }catch(e){} return v==="true"; }
+  function openGuide(first){
+    if(guideOpen) return;                                   // もう出ていれば二重に出さない
+    var n=GUIDE.bodies.length, i=0;
+    var mk=function(tag, cls){ var e=document.createElement(tag); e.className=cls; return e; };
+    var ov=mk("div","guide-ov");
+    ov.setAttribute("role","dialog"); ov.setAttribute("aria-modal","true"); ov.setAttribute("aria-label", GUIDE.title);
+    var box=mk("div","guide-box"), top=mk("div","guide-top");
+    var ttl=mk("p","guide-title"), step=mk("p","guide-step");
+    step.setAttribute("dir","ltr");                          // 「2 / 7」は いつも左から
+    var h=mk("h2","guide-h"), p=mk("p","guide-p"), dots=mk("div","guide-dots");
+    dots.setAttribute("aria-hidden","true");
+    var row=mk("div","guide-row");
+    var prevB=mk("button","btn btn-sub guide-prev"), nextB=mk("button","btn btn-primary guide-next");
+    prevB.type="button"; nextB.type="button";
+    top.appendChild(ttl); top.appendChild(step);
+    box.appendChild(top); box.appendChild(h); box.appendChild(p); box.appendChild(dots);
+    row.appendChild(prevB); row.appendChild(nextB);
+    ov.appendChild(box); ov.appendChild(row);
+    function draw(){
+      ttl.textContent=GUIDE.title;
+      step.textContent=GUIDE.step.replace("{n}", i+1).replace("{m}", n);
+      h.textContent=GUIDE.heads[i]||"";
+      p.textContent=GUIDE.bodies[i];
+      dots.innerHTML="";
+      for(var k=0;k<n;k++) dots.appendChild(mk("span","guide-dot"+(k===i?" on":"")));
+      prevB.textContent=GUIDE.prev;
+      prevB.style.visibility=(i===0)?"hidden":"visible";    // 1ページ目も「つぎへ」の位置を変えない
+      nextB.textContent=(i===n-1)?GUIDE.start:GUIDE.next;
+      ov.scrollTop=0;
+    }
+    function close(){
+      if(ov.parentNode) ov.parentNode.removeChild(ov);
+      guideOpen=null;
+      try{ localStorage.setItem(GUIDE_KEY,"true"); }catch(e){}
+    }
+    prevB.addEventListener("click", function(){ if(i>0){ i--; draw(); } });
+    nextB.addEventListener("click", function(){ if(i<n-1){ i++; draw(); } else close(); });
+    guideOpen={
+      back:function(){ if(i>0){ i--; draw(); return; } if(first) minimizeApp(); else close(); },
+      page:function(){ return i; }
+    };
+    draw();
+    document.body.appendChild(ov);
+    try{ nextB.focus(); }catch(e){}
+  }
+
   /* ---- 配線 ---- */
   el("btn-exams").addEventListener("click", function(){ mode=null; renderExams(); show("exams"); });
   el("btn-random").addEventListener("click", openPick);
@@ -1093,6 +1199,7 @@
     mode="browse"; renderExams(); show("exams");
   });
   el("reset-btn").addEventListener("click", resetProgress);
+  el("guide-btn").addEventListener("click", function(){ openGuide(false); });
   el("theme-btn").addEventListener("click", toggleTheme);
   el("exams-home").addEventListener("click", goHome);
   // 本試験の途中離脱は取り消しになるので一度だけ確認する
@@ -1129,6 +1236,7 @@
   setResultFoot(false);          // 解説画面のフッターは通常表示から始める
   load(); renderHome(); show("home");
   watchBack();                   // Android の戻るボタン(Play版だけ)
+  if(!guideDone()) openGuide(true);   // はじめての つかいかた(読み終えるまで毎回・2026-09-30)
 
   if("serviceWorker" in navigator && location.protocol.indexOf("http")===0){
     window.addEventListener("load", function(){ navigator.serviceWorker.register("sw.js").catch(function(){}); });
@@ -1144,7 +1252,8 @@
     setTheme:setTheme, toggleTheme:toggleTheme,
     poolQids:poolQids, wrongQids:wrongQids, allTags:allTags, findQ:findQ, tally:tally,
     kindOfTag:kindOfTag, qTagLabel:qTagLabel, sourceOf:sourceOf, markOf:markOf,
-    peek:function(){ return { mode:mode, seq:seq, seqIdx:seqIdx, current:current, picks:picks,
+    openGuide:openGuide, guideDone:guideDone, GUIDE:GUIDE,
+    peek:function(){ return { guide:(guideOpen ? guideOpen.page() : -1), mode:mode, seq:seq, seqIdx:seqIdx, current:current, picks:picks,
       lastScore:lastScore, save:save, deckKey:deckKey, fromScore:fromScore, examTitle:examTitle,
       browseTag:browseTag, browseSeq:browseSeq, browseIdx:browseIdx, theme:theme }; }
   };
