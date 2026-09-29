@@ -243,6 +243,16 @@
   .browse-nav.show{display:flex;}
   .verdict.browse{color:var(--ink); font-size:21px;}
 
+  /* ============ 確かめの窓(Play版だけ・2026-09-30) ============ */
+  /* Play版の window.confirm はボタンが英語(OK/Cancel)になるので、アプリの中に「いいえ/はい」の窓を出す。ほかの窓より上 */
+  .overlay.ask-ov{z-index:60; display:grid; place-items:center;}
+  .ask-box{background:var(--card); border-radius:18px; box-shadow:var(--shadow); padding:20px 18px 16px;
+    width:100%; max-width:380px; max-height:88vh; overflow-y:auto;}
+  .ask-msg{margin:0 0 16px; font-size:16px; font-weight:700; line-height:1.75; color:var(--ink);
+    white-space:pre-wrap; overflow-wrap:anywhere;}
+  .ask-row{display:flex; gap:10px;}
+  .ask-row .btn{flex:1; padding:13px 10px;}
+
   @media (prefers-reduced-motion: reduce){
     .screen{animation:none;}
   }
@@ -282,7 +292,7 @@
       <div class="foot-row">
         <button class="linkbtn" id="reset-btn">学習記録をリセット</button>
         <div class="foot-right">
-          <span class="ver" id="app-version">v0.2.0</span>
+          <span class="ver" id="app-version">v0.2.1</span>
           <button class="iconbtn small" id="theme-btn" title="夜の色にする" aria-label="配色を切り替える" aria-pressed="false">🌙</button>
         </div>
       </div>
@@ -417,7 +427,7 @@
 (function(){
   "use strict";
 
-  var VERSION="0.2.0";
+  var VERSION="0.2.1";
   var STORAGE_KEY="feexam.save.v1";
   var THEME_KEY="feexam.theme.v1";                      // 学習記録とは別キー＝リセットでは消えない
   var THEME_META={ light:"#3f51b5", dark:"#131722" };   // ブラウザのバーの色
@@ -793,7 +803,9 @@
       else if(btns[i]!==btn) btns[i].classList.add("dim");
     }
     if(!ok && btn) btn.classList.add("wrong");
-    setTimeout(function(){ toResult(current, num, ok, false); }, REVEAL_MS);
+    // 色付けの間に ✕ や戻るボタンでホームへ出たら、解説へは進まない(2026-09-30)
+    var f=current;
+    setTimeout(function(){ if(current===f) toResult(f, num, ok, false); }, REVEAL_MS);
   }
 
   function advanceExam(){
@@ -981,9 +993,95 @@
   function closePick(){ el("pick-overlay").classList.remove("show"); }
 
   function resetProgress(){
-    if(!confirm("学習記録(解答数・正答率・ベストスコア・出題の残り)をすべて消します。よろしいですか?")) return;
-    save={ answers:{}, best:{}, decks:{} };
-    persist(); renderHome();
+    askBox("学習記録(解答数・正答率・ベストスコア・出題の残り)をすべて消します。よろしいですか?", function(ok){
+      if(!ok) return;
+      save={ answers:{}, best:{}, decks:{} };
+      persist(); renderHome();
+    });
+  }
+
+  /* ---- Play版(Android)の戻るボタンと確かめの窓(2026-09-30) ----
+     ・Capacitor の WebView は戻るボタンを受け取らない(@capacitor/app が無いと、戻る=アプリごと後ろに下がる)。
+       Play版(isNativePlatform)だけ Capacitor.Plugins.App の backButton を受け取る(registerPlugin は WebView に無い)。
+       押したときの順: ①確かめの窓=いいえ ②図の拡大・ランダム演習の範囲えらび=閉じる
+                      ③ホーム以外の画面=その画面の「もどる/✕/ホームへ」と同じ行き先(本試験モードの中断は今までどおり確かめる)
+                      ④ホーム=アプリを後ろに下げる(minimizeApp。学習記録はそのまま)
+     ・Play版の window.confirm は Capacitor がボタンを英語の OK / Cancel に決め打ちしている。
+       Play版だけアプリの中に「いいえ / はい」の窓(.ask-ov)を出す。Web版は今までどおり window.confirm。
+     ・Web版(ブラウザ)の動きは何も変えない */
+  function isNativeApp(){
+    try{ var c=window.Capacitor; return !!(c && typeof c.isNativePlatform==="function" && c.isNativePlatform()); }catch(e){ return false; }
+  }
+  function nativePlugin(name, fn){
+    try{
+      var c=window.Capacitor;
+      if(typeof c.isPluginAvailable==="function" && !c.isPluginAvailable(name)) return null;
+      var p=c.Plugins && c.Plugins[name];
+      return (p && typeof p[fn]==="function") ? p : null;
+    }catch(e){ return null; }
+  }
+  function minimizeApp(){
+    var ap=nativePlugin("App","minimizeApp");
+    try{ if(ap){ var p=ap.minimizeApp(); if(p && p.catch) p.catch(function(){}); } }catch(e){}
+  }
+  var askOpen=null;     // 出している確かめの窓({no:いいえで閉じる})
+  // done(true=はい / false=いいえ)。Web版はその場で呼ぶ
+  function askBox(msg, done){
+    if(!isNativeApp()){
+      var r=false;
+      try{ r=!!window.confirm(msg); }catch(e){ r=false; }
+      done(r);
+      return;
+    }
+    if(askOpen) askOpen.no();
+    var ov=document.createElement("div"); ov.className="overlay show ask-ov";
+    ov.setAttribute("role","alertdialog"); ov.setAttribute("aria-modal","true");
+    var box=document.createElement("div"); box.className="ask-box";
+    var p=document.createElement("p"); p.className="ask-msg"; p.textContent=msg;
+    var row=document.createElement("div"); row.className="ask-row";
+    var no=document.createElement("button"); no.type="button"; no.className="btn btn-sub ask-no"; no.textContent="いいえ";
+    var yes=document.createElement("button"); yes.type="button"; yes.className="btn btn-primary ask-yes"; yes.textContent="はい";
+    var closed=false, me={};
+    function close(v){
+      if(closed) return;
+      closed=true;
+      if(askOpen===me) askOpen=null;
+      if(ov.parentNode) ov.parentNode.removeChild(ov);
+      done(v);
+    }
+    me.no=function(){ close(false); };
+    no.addEventListener("click", function(){ close(false); });
+    yes.addEventListener("click", function(){ close(true); });
+    row.appendChild(no); row.appendChild(yes);
+    box.appendChild(p); box.appendChild(row); ov.appendChild(box);
+    document.body.appendChild(ov);
+    askOpen=me;
+    try{ no.focus(); }catch(e){}
+  }
+  function activeScreen(){
+    for(var k in screens){ if(screens[k] && screens[k].classList.contains("active")) return k; }
+    return "home";
+  }
+  // 画面ごとの「もどる」ボタン(解説の画面は場面で出し分けているので下で決める)
+  var BACK_BTN={ exams:"exams-home", browse:"browse-exams", quiz:"quiz-home", score:"score-back" };
+  function onBack(){
+    if(askOpen){ askOpen.no(); return; }
+    if(el("fig-overlay").classList.contains("show")){ closeFig(); return; }
+    if(el("pick-overlay").classList.contains("show")){ closePick(); return; }
+    var cur=activeScreen();
+    if(cur==="result"){
+      // 解説閲覧=「一覧にもどる」/ 採点結果から=「採点結果にもどる」/ ランダム演習・復習=「ホームへ」
+      el(mode==="browse" ? "browse-back" : (fromScore ? "next-btn" : "result-home")).click();
+      return;
+    }
+    if(BACK_BTN[cur]){ el(BACK_BTN[cur]).click(); return; }
+    minimizeApp();
+  }
+  function watchBack(){
+    if(!isNativeApp()) return;
+    var ap=nativePlugin("App","addListener");
+    if(!ap) return;
+    try{ ap.addListener("backButton", function(){ onBack(); }); }catch(e){}
   }
 
   /* ---- 配線 ---- */
@@ -999,8 +1097,8 @@
   el("exams-home").addEventListener("click", goHome);
   // 本試験の途中離脱は取り消しになるので一度だけ確認する
   el("quiz-home").addEventListener("click", function(){
-    if(mode==="exam" && !confirm("本試験モードを中断します。この回の解答は記録されません。よろしいですか?")) return;
-    goHome();
+    if(mode!=="exam"){ goHome(); return; }
+    askBox("本試験モードを中断します。この回の解答は記録されません。よろしいですか?", function(ok){ if(ok) goHome(); });
   });
   el("next-btn").addEventListener("click", function(){
     if(fromScore){ fromScore=false; renderScore(); show("score"); return; }
@@ -1030,6 +1128,7 @@
   applyTheme(savedTheme() || (prefersDark()?"dark":"light"));
   setResultFoot(false);          // 解説画面のフッターは通常表示から始める
   load(); renderHome(); show("home");
+  watchBack();                   // Android の戻るボタン(Play版だけ)
 
   if("serviceWorker" in navigator && location.protocol.indexOf("http")===0){
     window.addEventListener("load", function(){ navigator.serviceWorker.register("sw.js").catch(function(){}); });

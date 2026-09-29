@@ -3,7 +3,7 @@
  * cache-first。中身を更新したら CACHE の数字を上げてください（例 v1 -> v2）。
  * figs/ は総量が大きいので precache には入れず、表示された図だけ runtime cache に貯める。
  */
-var CACHE = "feexam-v3";
+var CACHE = "feexam-v4";
 var ASSETS = [
   "./",
   "./index.html",
