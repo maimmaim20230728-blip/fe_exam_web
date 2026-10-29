@@ -173,6 +173,21 @@
   .choice.wrong{background:var(--wrong-soft); border-color:var(--wrong); color:var(--wrong-ink);}
   .choice.wrong .mark{color:var(--wrong);}
   .choice.dim{opacity:.45;}
+  .figs img:focus-visible{outline:3px solid var(--brand); outline-offset:2px;}
+  /* 本試験モードだけ:「わからない」「あとで見直す」と、見直しで戻ったときの自分のえらんだ答え(2026-10-30) */
+  .exam-tools{display:none; gap:10px; margin:4px 0 8px;}
+  .exam-tools.show{display:flex;}
+  .exam-tools .btn{flex:1 1 0; min-width:0; font-size:14.5px; padding:11px 8px;}
+  .exam-tools .btn[aria-pressed="true"]{background:var(--brand-soft); border-color:var(--brand-dark);}
+  .choice.picked{border-color:var(--brand); box-shadow:0 0 0 2px var(--brand) inset;}
+  .check-note{font-size:13.5px; color:var(--ink-soft); margin:0 0 12px; line-height:1.7;}
+  .check-foot{display:flex; flex-direction:column; gap:11px; margin-top:16px;}
+  /* 読み上げソフトだけに伝える文字(正誤)と、短い知らせ */
+  .sr-only{position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;}
+  .toast{position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:70; max-width:calc(100% - 32px);
+    background:#263238; color:#fff; font-size:15px; font-weight:700; line-height:1.5; padding:12px 18px; border-radius:12px; box-shadow:0 6px 18px rgba(0,0,0,.25); text-align:center;
+    opacity:0; pointer-events:none; transition:opacity .25s;}
+  .toast.show{opacity:1;}
 
   /* ============ 解説 ============ */
   .verdict{font-size:26px; font-weight:800; margin:0 0 4px; text-align:center;}
@@ -296,10 +311,10 @@
 
     <div class="card">
       <p class="stat-title">学習記録</p>
-      <div class="stat-row main"><span>総正答率</span><b id="home-rate">—</b></div>
+      <div class="stat-row main"><span>総正答率</span><b id="home-rate">まだなし</b></div>
       <div class="stat-row"><span>総解答数</span><b id="home-total">0</b></div>
-      <div class="stat-row"><span>科目A(旧午前)</span><b id="home-a">—</b></div>
-      <div class="stat-row"><span>科目B</span><b id="home-b">—</b></div>
+      <div class="stat-row"><span>科目A(旧午前)</span><b id="home-a">まだなし</b></div>
+      <div class="stat-row"><span>科目B</span><b id="home-b">まだなし</b></div>
     </div>
 
     <p class="warn" id="data-warn"></p>
@@ -318,7 +333,7 @@
       <div class="foot-row">
         <button class="linkbtn" id="reset-btn">学習記録をリセット</button>
         <div class="foot-right">
-          <span class="ver" id="app-version">v0.2.2</span>
+          <span class="ver" id="app-version">v0.2.3</span>
           <button class="iconbtn small" id="theme-btn" title="夜の色にする" aria-label="配色を切り替える" aria-pressed="false">🌙</button>
         </div>
       </div>
@@ -366,6 +381,25 @@
     <div class="q-text" id="q-text"></div>
     <div class="figs" id="q-figs"></div>
     <div class="choices" id="q-choices"></div>
+    <div class="exam-tools" id="exam-tools">
+      <button class="btn btn-sub" id="skip-btn" type="button">わからない</button>
+      <button class="btn btn-sub" id="flag-btn" type="button" aria-pressed="false">🔖 あとで見直す</button>
+    </div>
+  </section>
+
+  <!-- ============ 見直し(本試験モード・採点の前) ============ -->
+  <section id="check" class="screen">
+    <div class="topbar">
+      <button class="iconbtn" id="check-home" title="ホームへ">✕</button>
+      <div class="spacer"></div>
+      <span class="pill" id="check-title"></span>
+    </div>
+    <h2 class="sec-title">見直してから採点</h2>
+    <p class="check-note" id="check-note"></p>
+    <div class="exam-list" id="check-list"></div>
+    <div class="check-foot">
+      <button class="btn btn-primary" id="check-score">採点する</button>
+    </div>
   </section>
 
   <!-- ============ 解説 ============ -->
@@ -410,6 +444,9 @@
     </div>
   </section>
 
+  <div class="sr-only" id="sr-live" aria-live="polite"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
 </div>
 
 <!-- ============ 図の拡大 ============ -->
@@ -453,7 +490,7 @@
 (function(){
   "use strict";
 
-  var VERSION="0.2.2";
+  var VERSION="0.2.3";
   var STORAGE_KEY="feexam.save.v1";
   var THEME_KEY="feexam.theme.v1";                      // 学習記録とは別キー＝リセットでは消えない
   var THEME_META={ light:"#3f51b5", dark:"#131722" };   // ブラウザのバーの色
@@ -500,10 +537,13 @@
   var timerId=null, timerStart=0;
   var browseTag=null, browseSeq=[], browseIdx=0;   // 解説閲覧モード(学習記録には一切さわらない)
   var theme="light";    // "light" | "dark"
+  var answered=false;   // いまの問題に答えたか(答えたあとに押しても2回目は数えない)
+  var flags={};         // 本試験中の「あとで見直す」 qid -> true
+  var revisiting=false; // 見直しの一覧から問題へ戻っているところ(答えたら一覧へもどる)
 
   var el=function(id){ return document.getElementById(id); };
   var screens={ home:el("home"), exams:el("exams"), browse:el("browse"),
-                quiz:el("quiz"), result:el("result"), score:el("score") };
+                quiz:el("quiz"), check:el("check"), result:el("result"), score:el("score") };
 
   /* ---- 保存 ---- */
   function load(){
@@ -516,7 +556,20 @@
       }
     }catch(e){}
   }
-  function persist(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(save)); }catch(e){} }
+  // 保存できなかったら(空き容量が少ない・プライベートモードなど)その場で知らせる(1回の起動で1回だけ)
+  var saveWarned=false;
+  function persist(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(save)); }
+    catch(e){ if(!saveWarned){ saveWarned=true; toast("学習記録を保存できませんでした(端末の空き容量が少ないときなど)"); } }
+  }
+  var toastTimer=null;
+  function toast(msg){
+    var t=el("toast"); if(!t) return;
+    t.textContent=msg; t.classList.add("show");
+    clearTimeout(toastTimer); toastTimer=setTimeout(function(){ t.classList.remove("show"); }, 3500);
+  }
+  // 正誤などを読み上げソフトに伝える(画面には出さない)
+  function srSay(msg){ var s=el("sr-live"); if(!s) return; s.textContent=""; setTimeout(function(){ s.textContent=msg; }, 30); }
 
   /* ---- 配色(夜間モード) ---- */
   // 端末の設定を初期値にする。head の theme-boot が同じ判定で先に立てているので、ここは追認になる。
@@ -636,7 +689,7 @@
     var n=c+w;
     return { c:c, w:w, n:n, rate: n?Math.round(c*100/n):null };
   }
-  function rateText(t){ return t.rate==null ? "—" : t.rate+"% ("+t.n+"問)"; }
+  function rateText(t){ return t.rate==null ? "まだなし" : t.rate+"% ("+t.n+"問)"; }
   // 「最後に解いたとき不正解」かつ、いま読み込めている問題だけ
   function wrongQids(){
     var out=[];
@@ -662,7 +715,7 @@
   /* ---- ホーム ---- */
   function renderHome(){
     var all=tally(null);
-    el("home-rate").textContent = all.rate==null ? "—" : all.rate+"%";
+    el("home-rate").textContent = all.rate==null ? "まだなし" : all.rate+"%";
     el("home-total").textContent = all.n;
     el("home-a").textContent = rateText(tally("A"));
     el("home-b").textContent = rateText(tally("B"));
@@ -677,7 +730,7 @@
     el("btn-random").disabled=(total===0);
     el("btn-browse").disabled=(total===0);
     if(total===0){
-      warn.textContent="問題データが読み込まれていません。www/data/ に q_a_h27s.js 〜 q_b_r08.js を配置してください。";
+      warn.textContent="問題を読み込めませんでした。いったん閉じて、開き直してください。";
       warn.style.display="block";
     } else {
       warn.style.display="none";
@@ -705,7 +758,7 @@
       var parts=[];
       if(heldOf(tag)) parts.push(heldOf(tag));
       if(n) parts.push(n+"問");
-      sub.textContent=parts.join("・")||"—";
+      sub.textContent=parts.join("・")||"-";
       body.appendChild(nm); body.appendChild(sub);
       var best=document.createElement("span"); best.className="ebest";
       if(!ready) best.textContent="準備中";
@@ -751,7 +804,7 @@
     if(!p||!p.questions||!p.questions.length) return;
     mode="exam"; examTag=tag;
     examTitle=shortOf(tag)+(kindOfTag(tag)==="A"?" 科目A":"");
-    picks={}; seqIdx=0;
+    picks={}; flags={}; revisiting=false; seqIdx=0;
     seq=sortedQuestions(tag).map(function(q){ return qidOf(tag,q.q); });
     current=findQ(seq[0]);
     if(!current) return;
@@ -764,9 +817,10 @@
     if(!f){ goHome(); return; }
     current=f; renderQuestion();
   }
-  function startReview(){
+  // afterPass=復習をひと回り解き終えたところ。もう間違えた問題が無ければ、ホームで一言知らせる
+  function startReview(afterPass){
     var list=wrongQids();
-    if(!list.length){ goHome(); return; }
+    if(!list.length){ goHome(); if(afterPass) toast("復習の問題は、ぜんぶ できました"); return; }
     mode="review"; stopTimer();
     seq=shuffle(list); seqIdx=0;
     current=findQ(seq[0]);
@@ -784,6 +838,11 @@
       // 図が未配置でも壊れた画像アイコンを出さない
       img.addEventListener("error", function(){ img.style.display="none"; });
       img.addEventListener("click", function(){ openFig(img.src); });
+      // キーボード・スイッチでも Enter / Space で拡大できる
+      img.setAttribute("tabindex","0"); img.setAttribute("role","button");
+      img.addEventListener("keydown", function(e){
+        if(e.key==="Enter" || e.key===" " || e.key==="Spacebar"){ e.preventDefault(); openFig(img.src); }
+      });
       box.appendChild(img);
     });
   }
@@ -806,21 +865,37 @@
       // 選択肢も下線(<u>)を含み得る。データはビルド時に全エスケープ済みなのでHTML描画で安全
       var t=document.createElement("span"); t.className="ctext"; t.innerHTML=txt;
       b.appendChild(m); b.appendChild(t);
+      // 本試験の見直しで戻ったときは、前にえらんだ答えに印(正誤は出さない)
+      if(mode==="exam" && picks[c.qid]===i+1){ b.classList.add("picked"); b.setAttribute("aria-current","true"); }
       b.addEventListener("click", function(){ onAnswer(i+1,b); }, {once:true});
       box.appendChild(b);
     });
+    answered=false;
+    // 本試験モードだけ「わからない」「あとで見直す」
+    el("exam-tools").classList.toggle("show", mode==="exam");
+    var fb=el("flag-btn");
+    fb.setAttribute("aria-pressed", (mode==="exam" && flags[c.qid]) ? "true" : "false");
+    fb.textContent = (mode==="exam" && flags[c.qid]) ? "🔖 見直す印あり" : "🔖 あとで見直す";
     show("quiz");
   }
 
   function isCorrect(q, num){ return num!=null && (q.answers||[]).indexOf(num)>=0; }
 
+  // num=null は本試験の「わからない」(未解答のまま進む。採点では不正解・学習記録には入れない)
   function onAnswer(num, btn){
+    // 答えたあとは、ほかの選択肢を押しても記録しない(キーボード・読み上げソフトで続けて押したときも)(2026-10-30)
+    if(answered || !current) return;
+    answered=true;
     var q=current.q, ok=isCorrect(q,num);
     var btns=el("q-choices").querySelectorAll(".choice");
-    for(var i=0;i<btns.length;i++){ btns[i].style.pointerEvents="none"; }
+    for(var i=0;i<btns.length;i++){ btns[i].style.pointerEvents="none"; btns[i].setAttribute("aria-disabled","true"); }
 
     // 本試験モードは解答を伏せたまま全問通す。記録は採点時にまとめて。
-    if(mode==="exam"){ picks[current.qid]=num; advanceExam(); return; }
+    if(mode==="exam"){
+      picks[current.qid]=num;
+      if(revisiting){ openCheck(); return; }   // 見直しで戻った問題は、答えたら見直しの一覧へ
+      advanceExam(); return;
+    }
 
     record(current.qid, ok);
     for(i=0;i<btns.length;i++){
@@ -829,17 +904,55 @@
       else if(btns[i]!==btn) btns[i].classList.add("dim");
     }
     if(!ok && btn) btn.classList.add("wrong");
+    srSay(ok ? "正解" : "不正解");
     // 色付けの間に ✕ や戻るボタンでホームへ出たら、解説へは進まない(2026-09-30)
     var f=current;
     setTimeout(function(){ if(current===f) toResult(f, num, ok, false); }, REVEAL_MS);
   }
 
+  // 最後まで進んだら、「あとで見直す」「わからない」の問題があるときだけ見直しの一覧を出してから採点
   function advanceExam(){
     seqIdx++;
-    if(seqIdx>=seq.length){ finishExam(); return; }
+    if(seqIdx>=seq.length){ endExam(); return; }
     current=findQ(seq[seqIdx]);
-    if(!current){ finishExam(); return; }
+    if(!current){ endExam(); return; }
     renderQuestion();
+  }
+  function checkTargets(){
+    return seq.filter(function(qid){ return findQ(qid) && (flags[qid] || picks[qid]==null); });
+  }
+  function endExam(){ if(checkTargets().length) openCheck(); else finishExam(); }
+  /* ---- 見直し(本試験モード・採点の前) ---- */
+  function openCheck(){
+    revisiting=false;
+    el("check-title").textContent=examTitle;
+    var list=checkTargets(), box=el("check-list"); box.innerHTML="";
+    el("check-note").textContent = list.length
+      ? "「あとで見直す」の印を付けた問題と、まだ答えていない問題です。押すと その問題にもどれます(正解は採点のあとに出ます)。"
+      : "見直す問題は ありません。";
+    list.forEach(function(qid){
+      var f=findQ(qid), i=seq.indexOf(qid);
+      var b=document.createElement("button");
+      b.type="button"; b.className="exam-row"+(kindOfTag(f.tag)==="B"?" kb":"");
+      var body=document.createElement("div"); body.className="ebody";
+      var nm=document.createElement("div"); nm.className="ename"; nm.textContent="問"+(i+1)+(flags[qid]?"  🔖":"");
+      var sub=document.createElement("div"); sub.className="esub"; sub.textContent=plainHead(f.q.question,20);
+      body.appendChild(nm); body.appendChild(sub);
+      var st=document.createElement("span"); st.className="ebest";
+      st.textContent = picks[qid]==null ? "未解答" : "答え "+markOf(picks[qid]);
+      b.appendChild(body); b.appendChild(st);
+      b.addEventListener("click", function(){ seqIdx=i; current=f; revisiting=true; renderQuestion(); });
+      box.appendChild(b);
+    });
+    show("check");
+  }
+  function toggleFlag(){
+    if(mode!=="exam" || !current || answered) return;
+    var on=!flags[current.qid];
+    if(on) flags[current.qid]=true; else delete flags[current.qid];
+    var fb=el("flag-btn");
+    fb.setAttribute("aria-pressed", on?"true":"false");
+    fb.textContent = on ? "🔖 見直す印あり" : "🔖 あとで見直す";
   }
 
   function finishExam(){
@@ -860,7 +973,7 @@
   /* ---- 解説 ---- */
   function ansText(q){
     var marks=(q.answers||[]).map(function(n){ return markOf(n); });
-    return "正解: "+(marks.length?marks.join("または"):"—");
+    return "正解: "+(marks.length?marks.join("または"):"-");
   }
   // 公式の注記。下線(<u>)を含み得るのでHTML描画(データはビルド時エスケープ済み)
   function renderNote(q){
@@ -915,9 +1028,9 @@
   function nextPractice(){
     if(mode==="review"){
       seqIdx++;
-      if(seqIdx>=seq.length){ startReview(); return; }   // 復習デッキは毎回作り直す
+      if(seqIdx>=seq.length){ startReview(true); return; }   // 復習デッキは毎回作り直す
       current=findQ(seq[seqIdx]);
-      if(!current){ startReview(); return; }
+      if(!current){ startReview(true); return; }
       renderQuestion(); return;
     }
     var qid=nextFromDeck(), f=qid&&findQ(qid);
@@ -1090,7 +1203,7 @@
     return "home";
   }
   // 画面ごとの「もどる」ボタン(解説の画面は場面で出し分けているので下で決める)
-  var BACK_BTN={ exams:"exams-home", browse:"browse-exams", quiz:"quiz-home", score:"score-back" };
+  var BACK_BTN={ exams:"exams-home", browse:"browse-exams", quiz:"quiz-home", check:"check-home", score:"score-back" };
   function onBack(){
     if(askOpen){ askOpen.no(); return; }
     if(guideOpen){ guideOpen.back(); return; }
@@ -1134,7 +1247,7 @@
     ],
     bodies:[
       "IPAの基本情報技術者試験の過去問を解いて、解説を読んで学ぶアプリです。\n科目A(旧午前)は平成27年度 春期〜令和元年度 秋期の10回・800問、科目BはIPAが公開している50問を収めています。\n本アプリはIPAとは関係のない非公式の学習ツールで、解説も本アプリ独自のものです。",
-      "ホームの「📝 回を選んで挑戦」で、科目Aの回か、科目Bのセットをえらびます。\n1回分を問1から順に解き、答え合わせは最後にまとめて出ます。右上の時計は、かかった時間の目安です。\n採点結果には合格の目安(60%)が出て、マスを押すと その問題の解説を読めます。\n途中で左上の「✕」を押すと中断でき、その回の答えは記録されません。",
+      "ホームの「📝 回を選んで挑戦」で、科目Aの回か、科目Bのセットをえらびます。\n1回分を問1から順に解き、答え合わせは最後にまとめて出ます。右上の時計は、かかった時間の目安です。\n分からない問題は「わからない」で飛ばせます(採点では不正解、学習記録には入りません)。「🔖 あとで見直す」を押した問題と飛ばした問題は、最後に「採点する」の前に もう一度 見直せます。\n採点結果には合格の目安(60%)が出て、マスを押すと その問題の解説を読めます。\n途中で左上の「✕」を押すと中断でき、その回の答えは記録されません。",
       "「🎲 ランダム演習」では、出す範囲を「科目A 全部」「テクノロジ系」「マネジメント系」「ストラテジ系」「科目B 全部」からえらびます。\n1問答えるごとに、正解は緑、間違いは赤で出て、解説に進みます。「次へ」で次の問題、「ホームへ」でホームにもどります。\n同じ範囲では、ひととおり出るまで同じ問題はくり返しません。",
       "間違えた問題は「🔁 間違えた問題を復習」で、もう一度解けます。\n出るのは、最後に解いたときに間違えた問題です。正解すると、復習から外れます。\n図は、押すと大きく見られます。",
       "「📖 解説を読む」では、回をえらぶと問題の一覧が出て、問題を押すと その解説を読めます。\n「前の問題」「次の問題」で順に読めます。\nここで読んでも、学習記録は変わりません。解説の下には、いつも出典が出ます。",
@@ -1203,10 +1316,16 @@
   el("theme-btn").addEventListener("click", toggleTheme);
   el("exams-home").addEventListener("click", goHome);
   // 本試験の途中離脱は取り消しになるので一度だけ確認する
-  el("quiz-home").addEventListener("click", function(){
+  function leaveExam(){
     if(mode!=="exam"){ goHome(); return; }
     askBox("本試験モードを中断します。この回の解答は記録されません。よろしいですか?", function(ok){ if(ok) goHome(); });
-  });
+  }
+  el("quiz-home").addEventListener("click", leaveExam);
+  el("check-home").addEventListener("click", leaveExam);
+  el("check-score").addEventListener("click", function(){ if(mode==="exam") finishExam(); });
+  // 本試験モード:「わからない」は未解答のまま次へ(採点では不正解・学習記録と復習には入れない)
+  el("skip-btn").addEventListener("click", function(){ if(mode==="exam") onAnswer(null, null); });
+  el("flag-btn").addEventListener("click", toggleFlag);
   el("next-btn").addEventListener("click", function(){
     if(fromScore){ fromScore=false; renderScore(); show("score"); return; }
     nextPractice();
