@@ -212,6 +212,7 @@
     padding:16px 18px 20px; font-size:calc(15.5px*var(--fs,1)); line-height:1.85; margin-bottom:10px;}
   .expl h3{margin:0 0 8px; font-size:14px; color:var(--brand-dark);}
   .expl .body{white-space:pre-wrap; overflow-wrap:anywhere;}
+  .expl .body .eh{color:var(--brand-dark);}
   /* 出典表示(IPAの利用条件対応・必ず1行出す) */
   .src-line{font-size:calc(11.5px*var(--fs,1)); color:var(--ink-soft); line-height:1.6; margin:0 0 16px;
     padding-left:9px; border-left:3px solid var(--line); overflow-wrap:anywhere;}
@@ -369,7 +370,7 @@
       <div class="foot-row">
         <button class="linkbtn" id="reset-btn">学習記録をリセット</button>
         <div class="foot-right">
-          <span class="ver" id="app-version">v0.2.5</span>
+          <span class="ver" id="app-version">v0.2.6</span>
           <button class="iconbtn small" id="theme-btn" title="夜の色にする" aria-label="配色を切り替える" aria-pressed="false">🌙</button>
         </div>
       </div>
@@ -549,7 +550,7 @@
 (function(){
   "use strict";
 
-  var VERSION="0.2.5";
+  var VERSION="0.2.6";
   var STORAGE_KEY="feexam.save.v1";
   var THEME_KEY="feexam.theme.v1";                      // 学習記録とは別キー＝リセットでは消えない
   var THEME_META={ light:"#3f51b5", dark:"#131722" };   // ブラウザのバーの色
@@ -1180,7 +1181,7 @@
     el("r-question").innerHTML=f.q.question||"";
     renderFigs(el("r-figs"), f.q.figures);
     var body=el("expl-body");
-    if(f.q.explanation){ body.innerHTML=f.q.explanation; }
+    if(f.q.explanation){ body.innerHTML=f.q.explanation.replace(/^(【[^】\r\n]+】)$/gm,'<strong class="eh">$1</strong>'); }
     else { body.innerHTML=""; body.textContent="(この問題の解説は準備中です)"; }
     // 出典は必ず1行出す(IPAの利用条件対応)
     el("r-source").textContent=sourceOf(f);
